@@ -2,10 +2,9 @@
 #   Remind to someone something
 #
 # Commands:
-#   hubot remind to <user> in #s|m|h|d to <something to remind> - remind to someone something in a given time eg 5m for five minutes
-#   hubot what will you remind - Show active reminders
-#   hubot what are your reminders - Show active reminders
-#   hubot forget|rm reminder <id> - Remove a given reminder
+#   hubot remind me in # s|m|h|d to <something> - Set a reminder (e.g. 5m for five minutes)
+#   hubot reminders - Show active reminders
+#   hubot reminders forget <id> - Remove a given reminder
 
 cronJob = require('cron').CronJob
 moment = require('moment')
@@ -36,7 +35,7 @@ unregisterJob = (robot, id)->
 
 handleNewJob = (robot, msg, user, pattern, message) ->
     id = createNewJob robot, pattern, user, message
-    msg.send "Got it! I will remind to #{user.name} at #{pattern}"
+    msg.send "Will do."
 
 module.exports = (robot) ->
   robot.brain.data.things or= {}
@@ -47,7 +46,7 @@ module.exports = (robot) ->
       console.log id
       registerNewJobFromBrain robot, id, job...
 
-  robot.respond /what (will you remind|are your reminders)/i, (msg) ->
+  robot.respond /reminders/i, (msg) ->
     text = ''
     for id, job of JOBS
       room = job.user.reply_to || job.user.room
@@ -56,42 +55,30 @@ module.exports = (robot) ->
     if text.length > 0
       msg.send text
     else
-      msg.send "Nothing to remind, isn't it?"
+      msg.send "No reminders!"
 
-  robot.respond /(forget|rm|remove) reminder (\d+)/i, (msg) ->
-    reqId = msg.match[2]
+  robot.respond /reminders forget (\d+)/i, (msg) ->
+    reqId = msg.match[1]
     for id, job of JOBS
       if (reqId == id)
         if unregisterJob(robot, reqId)
-          msg.send "Reminder #{id} sleep with the fishes..."
+          msg.send "Reminder #{id} removed..."
         else
-          msg.send "i can't forget it, maybe i need a headshrinker"
+          msg.send "Sorry, couldn't find that reminder."
 
-  robot.respond /remind (.*) in (\d+)([s|m|h|d]) to (.*)/i, (msg) ->
-    name = msg.match[1]
-    at = msg.match[2]
-    time = msg.match[3]
-    something = msg.match[4]
+  robot.respond /remind me in (\d+) ?(s|m|h|d|seconds|minutes|hours|days) to (.*)/i, (msg) ->
+    at = msg.match[1]
+    timeWord = msg.match[2]
+    something = msg.match[3]
+    users = [msg.message.user]
 
-    if /^me$/i.test(name.trim())
-      users = [msg.message.user]
-    else
-      name = name.replace 'to ', ''
-      users = robot.brain.usersForFuzzyName(name)
+    switch timeWord
+      when 's' then timeWord = 'second'
+      when 'm' then timeWord = 'minute'
+      when 'h' then timeWord = 'hour'
+      when 'd' then timeWord = 'day'
 
-    if users.length is 1
-      switch time
-        when 's' then timeWord = 'second'
-        when 'm' then timeWord = 'minute'
-        when 'h' then timeWord = 'hour'
-        when 'd' then timeWord = 'day'
-
-      handleNewJob robot, msg, users[0], moment().add(at, timeWord).toDate(), something
-    else if users.length > 1
-      msg.send "Be more specific, I know #{users.length} people " +
-        "named like that: #{(user.name for user in users).join(", ")}"
-    else
-      msg.send "#{name}? Never heard of 'em"
+    handleNewJob robot, msg, users[0], moment().add(at, timeWord).toDate(), something
 
 
 
@@ -122,8 +109,8 @@ class Job
     envelope = user: @user, room: @user.room
     message = @message
     if @user.mention_name
-      message = "Hey @#{envelope.user.mention_name} remember: " + @message
+      message = "@#{envelope.user.mention_name}: " + @message
     else
-      message = "Hey @#{envelope.user.name} remember: " + @message
+      message = "@#{envelope.user.name}: " + @message
     robot.send envelope, message
 
